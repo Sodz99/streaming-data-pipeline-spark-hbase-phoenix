@@ -1,0 +1,115 @@
+version: "3"
+
+services:
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: h_namenode
+    restart: always
+    ports:
+      - 9870:9870
+      - 9010:9000
+    volumes:
+      - hadoop_namenode:/hadoop/dfs/name
+      - hadoop_conf:/etc/hadoop
+    environment:
+      - CLUSTER_NAME=test
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+    env_file:
+      - ./hadoop.env
+
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: h_datanode
+    restart: always
+    volumes:
+      - hadoop_datanode:/hadoop/dfs/data
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+      CORE_CONF_fs_defaultFS: hdfs://namenode:9000
+    ports:
+      - "9864:9864"
+    env_file:
+      - ./hadoop.env
+
+  hbase:
+    image: pavansrivathsa/hbase-phoenix
+    container_name: h_hbase-phoenix
+    volumes:
+      - hbase_libs:/opt/hbase-2.4.8/lib/
+    environment:
+      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864"
+    ports:
+      - "16000:16000"
+    tty: true
+  
+  zookeeper:
+    hostname: ZOOKEEPER
+    container_name: h_zookeeper
+    image: 'bitnami/zookeeper'
+    ports:
+      - 2181:2181
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+
+  resourcemanager:
+    image: bde2020/hadoop-resourcemanager:2.0.0-hadoop3.2.1-java8
+    container_name: h_resourcemanager
+    restart: always
+    environment:
+      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864"
+    env_file:
+      - ./hadoop.env
+
+  nodemanager1:
+    image: bde2020/hadoop-nodemanager:2.0.0-hadoop3.2.1-java8
+    container_name: h_nodemanager
+    restart: always
+    environment:
+      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864 resourcemanager:8088"
+    env_file:
+      - ./hadoop.env
+
+  historyserver:
+    image: bde2020/hadoop-historyserver:2.0.0-hadoop3.2.1-java8
+    container_name: h_historyserver
+    restart: always
+    environment:
+      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864 resourcemanager:8088"
+    volumes:
+      - hadoop_historyserver:/hadoop/yarn/timeline
+    env_file:
+      - ./hadoop.env
+
+  spark-master:
+    image: bde2020/spark-master:3.0.0-hadoop3.2
+    container_name: h_spark-master
+    depends_on:
+      - namenode
+      - datanode
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    volumes:
+      - hbase_libs:/opt/hbase-2.4.8/lib/
+      - workspace:/opt/workspace/
+      - hadoop_conf:/opt/hadoop_conf
+    environment:
+      - INIT_DAEMON_STEP=setup_spark
+      - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
+      - HADOOP_CONF_DIR=/opt/hadoop_conf
+
+  jupyterlab:
+    image: pavansrivathsa/jupyterlab
+    container_name: h_jupyterlab
+    ports:
+      - 4888:4888
+    volumes:
+      - workspace:/opt/workspace/
+
+volumes:
+  hadoop_namenode:
+  hadoop_datanode:
+  hbase_libs:
+  workspace:
+  hadoop_conf:
+  hadoop_historyserver:
